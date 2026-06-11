@@ -14,6 +14,7 @@ class AppConfig:
     def __init__(self):
         # 读取环境变量
         self.api_key = os.getenv("API_KEY")
+        self.api_token = os.getenv("API_TOKEN", "mytoken123456")
         self.db_host = os.getenv("DB_HOST")
         self.db_port = os.getenv("DB_PORT")
         self.db_user = os.getenv("DB_USER")
