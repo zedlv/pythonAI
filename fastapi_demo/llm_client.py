@@ -16,10 +16,11 @@ def is_llm_success(reply: str) -> bool:
 
 async def call_llm(prompt: str):
     retries = 0
+    transport = httpx.AsyncHTTPTransport(local_address="0.0.0.0")
 
     while retries < MAX_RETRY:
         try:
-            async with httpx.AsyncClient(timeout=TIME_OUT) as client:
+            async with httpx.AsyncClient(timeout=TIME_OUT, transport=transport) as client:
                 response = await client.post(
                     url=URL,
                     json={"prompt": prompt},
