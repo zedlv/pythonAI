@@ -19,12 +19,14 @@ class AppConfig:
         self.db_port = os.getenv("DB_PORT")
         self.db_user = os.getenv("DB_USER")
         self.db_pwd = os.getenv("DB_PWD")
+        self.db_name = os.getenv("DB_NAME")
 
     # 安全打印：不泄露密钥
     def show_config(self):
         print("=== 项目配置 ===")
         print(f"数据库地址：{self.db_host}")
         print(f"数据库端口：{self.db_port}")
+        print(f"数据库名称：{self.db_name}")
         print(f"数据库账号：{self.db_user}")
         # 脱敏处理：隐藏密钥，不打印原文
         print(f"API密钥：{self.api_key[:3]}***" if self.api_key else "未配置")

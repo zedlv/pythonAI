@@ -18,6 +18,7 @@ async def call_llm(prompt: str):
                 response = await client.post(
                     url=URL,
                     json={"prompt": prompt},
+                    headers={"User-Agent": "fastapi-demo/1.0"},
                 )
                 response.raise_for_status()
                 result = response.json()
