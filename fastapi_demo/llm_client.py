@@ -9,6 +9,11 @@ MAX_RETRY = 2
 URL = "https://postman-echo.com/post"
 
 
+def is_llm_success(reply: str) -> bool:
+    """成功回答以 LLM模型返回： 开头；错误文案不缓存"""
+    return reply.startswith("LLM模型返回：")
+
+
 async def call_llm(prompt: str):
     retries = 0
 

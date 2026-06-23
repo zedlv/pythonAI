@@ -1,12 +1,40 @@
+import hashlib
+
 from sqlalchemy.orm import Session
 
 from core.exceptions import BusinessException
-from llm_client import call_llm
+from core.redis_client import delete_cache, get_cache, set_cache
+from llm_client import call_llm, is_llm_success
 from models.chat import ChatMessage
 from schemas.history import ChatHistoryItem, PageResult, build_total_pages
 
 
+def _cache_key(user_msg: str) -> str:
+    return f"chat:answer:{hashlib.md5(user_msg.encode()).hexdigest()}"
+
+
 async def process_chat_message(db: Session, user_id: str, session_id: str, user_msg: str):
+    cache_key = _cache_key(user_msg)
+
+    cache_answer = get_cache(cache_key)
+    if cache_answer and is_llm_success(cache_answer):
+        new_msg = ChatMessage(
+            user_id=user_id,
+            session_id=session_id,
+            user_content=user_msg,
+            ai_content=cache_answer,
+            msg_status=1,
+        )
+        db.add(new_msg)
+        db.commit()
+        return {
+            "your_msg": user_msg,
+            "llm_reply": cache_answer,
+            "from_cache": True,
+        }
+    elif cache_answer:
+        delete_cache(cache_key)
+
     new_msg = ChatMessage(
         user_id=user_id,
         session_id=session_id,
@@ -20,13 +48,19 @@ async def process_chat_message(db: Session, user_id: str, session_id: str, user_
     try:
         ai_reply = await call_llm(user_msg)
 
+        if is_llm_success(ai_reply):
+            set_cache(cache_key, ai_reply)
+            new_msg.msg_status = 1
+        else:
+            new_msg.msg_status = 0
+
         new_msg.ai_content = ai_reply
-        new_msg.msg_status = 1
         db.commit()
 
         return {
             "your_msg": user_msg,
             "llm_reply": ai_reply,
+            "from_cache": False,
         }
 
     except Exception:

@@ -20,6 +20,9 @@ class AppConfig:
         self.db_user = os.getenv("DB_USER")
         self.db_pwd = os.getenv("DB_PWD")
         self.db_name = os.getenv("DB_NAME")
+        self.redis_host = os.getenv("REDIS_HOST", "127.0.0.1")
+        self.redis_port = int(os.getenv("REDIS_PORT", "6379"))
+        self.redis_db = int(os.getenv("REDIS_DB", "0"))
 
     # 安全打印：不泄露密钥
     def show_config(self):
