@@ -3,6 +3,7 @@ import time
 
 from sqlalchemy.orm import Session
 
+from core.desensitize import log_safe
 from core.exceptions import BusinessException
 from core.logger import logger
 from core.redis_client import (
@@ -14,6 +15,7 @@ from core.redis_client import (
     get_ttl,
     set_cache,
 )
+from core.sensitive_filter import contains_sensitive
 from llm_client import call_llm, is_llm_success
 from models.chat import ChatMessage
 from schemas.history import ChatHistoryItem, PageResult, build_total_pages
@@ -23,17 +25,16 @@ def _cache_key(user_msg: str) -> str:
     return f"chat:answer:{hashlib.md5(user_msg.encode()).hexdigest()}"
 
 
-def _msg_summary(clean_msg: str) -> str:
-    return f"{clean_msg[:20]}..." if len(clean_msg) > 20 else clean_msg
-
-
 async def process_chat_message(db: Session, user_id: str, session_id: str, user_msg: str):
     clean_msg = user_msg.strip()
     if not clean_msg:
         raise BusinessException("消息内容不能为空")
 
+    if contains_sensitive(clean_msg):
+        raise BusinessException("消息包含违规内容，请调整后重试")
+
     cache_key = _cache_key(clean_msg)
-    summary = _msg_summary(clean_msg)
+    safe_summary = log_safe(clean_msg)
 
     start_time = time.time()
     cache_answer = get_cache(cache_key)
@@ -43,7 +44,7 @@ async def process_chat_message(db: Session, user_id: str, session_id: str, user_
         remain_ttl = get_ttl(cache_key)
         logger.info(
             f"[缓存命中 HIT-空值] key={cache_key}, 耗时={cost_ms}ms, "
-            f"剩余TTL={remain_ttl}s, 消息摘要={summary}"
+            f"剩余TTL={remain_ttl}s, 消息摘要={safe_summary}"
         )
         raise BusinessException("AI未生成有效回答")
 
@@ -52,7 +53,7 @@ async def process_chat_message(db: Session, user_id: str, session_id: str, user_
         remain_ttl = get_ttl(cache_key)
         logger.info(
             f"[缓存命中 HIT-异常] key={cache_key}, 耗时={cost_ms}ms, "
-            f"剩余TTL={remain_ttl}s, 消息摘要={summary}"
+            f"剩余TTL={remain_ttl}s, 消息摘要={safe_summary}"
         )
         raise BusinessException("AI服务调用异常，聊天记录已标记失败")
 
@@ -61,7 +62,7 @@ async def process_chat_message(db: Session, user_id: str, session_id: str, user_
         remain_ttl = get_ttl(cache_key)
         logger.info(
             f"[缓存命中 HIT] key={cache_key}, 耗时={cost_ms}ms, "
-            f"剩余TTL={remain_ttl}s, 消息摘要={summary}"
+            f"剩余TTL={remain_ttl}s, 消息摘要={safe_summary}"
         )
 
         new_msg = ChatMessage(
@@ -85,7 +86,7 @@ async def process_chat_message(db: Session, user_id: str, session_id: str, user_
     cost_ms = round((time.time() - start_time) * 1000, 2)
     logger.info(
         f"[缓存未命中 MISS] key={cache_key}, 缓存查询耗时={cost_ms}ms, "
-        f"开始调用LLM接口, 消息摘要={summary}"
+        f"开始调用LLM接口, 消息摘要={safe_summary}"
     )
 
     new_msg = ChatMessage(
@@ -107,7 +108,10 @@ async def process_chat_message(db: Session, user_id: str, session_id: str, user_
             set_cache(cache_key, CACHE_EMPTY_MARKER, CACHE_TTL_EMPTY)
             new_msg.msg_status = 0
             db.commit()
-            logger.warning(f"[空值缓存] key={cache_key}, LLM返回空，已缓存{CACHE_TTL_EMPTY}s")
+            logger.warning(
+                f"[空值缓存] key={cache_key}, LLM返回空，已缓存{CACHE_TTL_EMPTY}s, "
+                f"消息摘要={safe_summary}"
+            )
             raise BusinessException("AI未生成有效回答")
 
         if is_llm_success(ai_reply):
@@ -115,7 +119,10 @@ async def process_chat_message(db: Session, user_id: str, session_id: str, user_
             new_msg.ai_content = ai_reply
             new_msg.msg_status = 1
             db.commit()
-            logger.info(f"[LLM调用完成] key={cache_key}, 接口耗时={llm_cost_ms}ms")
+            logger.info(
+                f"[LLM调用完成] key={cache_key}, 接口耗时={llm_cost_ms}ms, "
+                f"消息摘要={safe_summary}"
+            )
             return {
                 "your_msg": clean_msg,
                 "llm_reply": ai_reply,
@@ -126,7 +133,10 @@ async def process_chat_message(db: Session, user_id: str, session_id: str, user_
         new_msg.ai_content = ai_reply
         new_msg.msg_status = 0
         db.commit()
-        logger.error(f"[LLM调用失败] key={cache_key}, 返回: {ai_reply}")
+        logger.error(
+            f"[LLM调用失败] key={cache_key}, 返回摘要={log_safe(ai_reply)}, "
+            f"消息摘要={safe_summary}"
+        )
         raise BusinessException("AI服务调用异常，聊天记录已标记失败")
 
     except BusinessException:
@@ -135,7 +145,9 @@ async def process_chat_message(db: Session, user_id: str, session_id: str, user_
         set_cache(cache_key, CACHE_ERROR_MARKER, CACHE_TTL_EMPTY)
         new_msg.msg_status = 0
         db.commit()
-        logger.error(f"[LLM调用失败] key={cache_key}, 错误: {e}")
+        logger.error(
+            f"[LLM调用失败] key={cache_key}, 错误: {e}, 消息摘要={safe_summary}"
+        )
         raise BusinessException("AI服务调用异常，聊天记录已标记失败")
 
 
