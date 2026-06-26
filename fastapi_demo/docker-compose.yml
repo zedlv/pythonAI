@@ -43,17 +43,9 @@ services:
     restart: always
     ports:
       - "8000:8000"
-    environment:
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_USER: postgres
-      DB_PWD: "123456"
-      DB_NAME: fastapi_chat_db
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      REDIS_DB: "0"
-      API_TOKEN: mytoken123456
-      DOCKER_CONTAINER: "1"
+    # 容器专用环境配置文件，和本地区分
+    env_file:
+      - ./.env.docker
     depends_on:
       db:
         condition: service_healthy

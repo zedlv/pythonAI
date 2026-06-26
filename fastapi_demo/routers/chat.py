@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from core.auth import verify_token
@@ -11,12 +11,13 @@ router = APIRouter()
 
 
 @router.post("/chat", dependencies=[Depends(verify_token)])
-async def chat(req: ChatRequest, db: Session = Depends(get_db)):
+async def chat(req: ChatRequest, db: Session = Depends(get_db), request: Request = None):
     return await process_chat_message(
         db=db,
         user_id=req.user_id,
         session_id=req.session_id,
         user_msg=req.message,
+        request=request,
     )
 
 
@@ -26,11 +27,12 @@ async def chat_history(
     page: int = Query(1, ge=1, description="页码，最小为1"),
     page_size: int = Query(10, ge=1, le=100, description="每页条数，1-100"),
     db: Session = Depends(get_db),
+    request: Request = None,
 ):
-    page_data = await get_user_chat_history(db, user_id, page, page_size)
+    page_data = await get_user_chat_history(db, user_id, page, page_size, request)
     return UnifiedResponse(
         code=200,
         message="查询成功",
         data=page_data.model_dump(),
-        request_id=get_request_id(),
+        request_id=get_request_id(request),
     )
