@@ -3,8 +3,8 @@ import redis
 from config import config
 from core.logger import logger
 
-CACHE_TTL_NORMAL = 1800
-CACHE_TTL_EMPTY = 300
+CACHE_TTL_NORMAL = config.cache_ttl_normal
+CACHE_TTL_EMPTY = config.cache_ttl_empty
 CACHE_EMPTY_MARKER = "__EMPTY__"
 CACHE_ERROR_MARKER = "__ERROR__"
 

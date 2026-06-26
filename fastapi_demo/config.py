@@ -28,6 +28,8 @@ class AppConfig:
         self.redis_host = os.getenv("REDIS_HOST", docker_host)
         self.redis_port = int(os.getenv("REDIS_PORT", "6379"))
         self.redis_db = int(os.getenv("REDIS_DB", "0"))
+        self.cache_ttl_normal = int(os.getenv("CACHE_TTL_NORMAL", "1800"))
+        self.cache_ttl_empty = int(os.getenv("CACHE_TTL_EMPTY", "300"))
 
     # 安全打印：不泄露密钥
     def show_config(self):
