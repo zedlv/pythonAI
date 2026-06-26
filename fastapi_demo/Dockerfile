@@ -1,5 +1,9 @@
 FROM python:3.11-slim
 
+# 安装 curl 用于健康检查，清理缓存减小镜像体积
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV APP_HOME=/app

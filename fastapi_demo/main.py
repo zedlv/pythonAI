@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from core.logger import setup_logging
 from core.middleware import log_requests_middleware
 from core.response import UnifiedResponse, get_request_id
-from routers import ping, chat
+from routers import ping, chat, health
 # 项目入口、全局异常捕获、中间件/路由挂载
 setup_logging()
 
@@ -63,3 +63,4 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(ping.router)
 app.include_router(chat.router)
+app.include_router(health.router)
