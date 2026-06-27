@@ -1,36 +1,78 @@
-# 生成全局唯一UUID
-from uuid import uuid4
-# FastAPI请求对象，用于读取请求上下文存储的request_id
-from fastapi import Request
+# redis 官方客户端
+import redis
+# 全局配置实例
+from config import config
+# 项目日志工具
+from core.logger import logger
 
-# Pydantic基础模型，用于统一接口返回JSON结构
-from pydantic import BaseModel
+# 正常问答缓存过期时间（从配置读取）
+CACHE_TTL_NORMAL = config.cache_ttl_normal
+# 空结果/异常结果缓存过期时间（防缓存穿透、防重复报错）
+CACHE_TTL_EMPTY = config.cache_ttl_empty
+# 空数据标记：LLM返回无有效内容时存入此占位符
+CACHE_EMPTY_MARKER = "__EMPTY__"
+# 异常标记：LLM调用失败、接口异常时存入此占位符
+CACHE_ERROR_MARKER = "__ERROR__"
+
+# 创建全局Redis客户端单例
+redis_client = redis.Redis(
+    host=config.redis_host,        # Redis地址（自动区分本地/Docker）
+    port=config.redis_port,        # Redis端口
+    db=config.redis_db,            # 使用的Redis库编号
+    decode_responses=True,         # 自动将bytes转为字符串，不用手动decode
+    socket_connect_timeout=3,      # 连接超时3秒，防止卡死阻塞接口
+)
 
 
-class UnifiedResponse(BaseModel):
+def set_cache(key: str, value: str, expire_seconds: int = CACHE_TTL_NORMAL):
     """
-    项目全局统一接口返回格式模型
-    所有正常/异常接口响应均使用该结构，前后端交互标准统一
+    写入带过期时间的字符串缓存
+    :param key: 缓存键
+    :param value: 缓存值（正常回答/空标记/异常标记）
+    :param expire_seconds: 过期秒数，默认普通缓存时长
     """
-    # HTTP业务状态码，200成功，4xx参数/权限错误，5xx服务异常
-    code: int
-    # 给前端展示的提示文案
-    message: str
-    # 业务返回数据，支持字典/列表/数字/字符串/布尔/空多种类型，不传默认为None
-    data: dict | list | str | int | float | bool | None = None
-    # 请求链路追踪ID，用于日志检索、问题定位
-    request_id: str | None = None
+    try:
+        # setex = set + expire，设置key同时指定TTL
+        redis_client.setex(key, expire_seconds, value)
+        logger.info(f"[缓存写入] key={key}, TTL={expire_seconds}s")
+    except Exception as e:
+        # Redis异常仅打警告日志，不阻断主业务流程
+        logger.warning(f"[缓存写入失败] key={key}, 错误: {e}")
 
 
-def get_request_id(request: Request = None) -> str:
+def get_cache(key: str) -> str | None:
     """
-    获取当前请求唯一追踪ID
-    优先级：请求上下文已存在request_id > 现场生成新短UUID
-    :param request: FastAPI原始请求对象（可选）
-    :return: 格式化后的请求ID字符串，前缀req_ + 12位UUID
+    读取缓存字符串
+    :param key: 缓存键
+    :return: 缓存值 / None（不存在/读取异常）
     """
-    # 如果传入request且state中已提前存入request_id，直接复用（中间件提前生成）
-    if request and hasattr(request.state, "request_id"):
-        return request.state.request_id
-    # 无上下文则现场生成短UUID，截取前12位十六进制字符缩短长度
-    return f"req_{uuid4().hex[:12]}"
+    try:
+        return redis_client.get(key)
+    except Exception as e:
+        logger.warning(f"[缓存读取失败] key={key}, 错误: {e}")
+        # Redis故障时返回None，业务自动走LLM兜底
+        return None
+
+
+def get_ttl(key: str) -> int:
+    """
+    查询key剩余存活时间
+    :param key: 缓存键
+    :return:
+        - 正数：剩余秒数
+        - -1：key存在但无过期时间
+        - -2：key不存在 / 查询异常
+    """
+    try:
+        return redis_client.ttl(key)
+    except Exception as e:
+        logger.warning(f"[缓存TTL查询失败] key={key}, 错误: {e}")
+        return -2
+
+
+def delete_cache(key: str):
+    """删除指定缓存key"""
+    try:
+        redis_client.delete(key)
+    except Exception as e:
+        logger.warning(f"[缓存删除失败] key={key}, 错误: {e}")
