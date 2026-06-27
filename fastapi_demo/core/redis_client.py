@@ -1,48 +1,36 @@
-import redis
+# 生成全局唯一UUID
+from uuid import uuid4
+# FastAPI请求对象，用于读取请求上下文存储的request_id
+from fastapi import Request
 
-from config import config
-from core.logger import logger
-
-CACHE_TTL_NORMAL = config.cache_ttl_normal
-CACHE_TTL_EMPTY = config.cache_ttl_empty
-CACHE_EMPTY_MARKER = "__EMPTY__"
-CACHE_ERROR_MARKER = "__ERROR__"
-
-redis_client = redis.Redis(
-    host=config.redis_host,
-    port=config.redis_port,
-    db=config.redis_db,
-    decode_responses=True,
-    socket_connect_timeout=3,
-)
+# Pydantic基础模型，用于统一接口返回JSON结构
+from pydantic import BaseModel
 
 
-def set_cache(key: str, value: str, expire_seconds: int = CACHE_TTL_NORMAL):
-    try:
-        redis_client.setex(key, expire_seconds, value)
-        logger.info(f"[缓存写入] key={key}, TTL={expire_seconds}s")
-    except Exception as e:
-        logger.warning(f"[缓存写入失败] key={key}, 错误: {e}")
+class UnifiedResponse(BaseModel):
+    """
+    项目全局统一接口返回格式模型
+    所有正常/异常接口响应均使用该结构，前后端交互标准统一
+    """
+    # HTTP业务状态码，200成功，4xx参数/权限错误，5xx服务异常
+    code: int
+    # 给前端展示的提示文案
+    message: str
+    # 业务返回数据，支持字典/列表/数字/字符串/布尔/空多种类型，不传默认为None
+    data: dict | list | str | int | float | bool | None = None
+    # 请求链路追踪ID，用于日志检索、问题定位
+    request_id: str | None = None
 
 
-def get_cache(key: str) -> str | None:
-    try:
-        return redis_client.get(key)
-    except Exception as e:
-        logger.warning(f"[缓存读取失败] key={key}, 错误: {e}")
-        return None
-
-
-def get_ttl(key: str) -> int:
-    try:
-        return redis_client.ttl(key)
-    except Exception as e:
-        logger.warning(f"[缓存TTL查询失败] key={key}, 错误: {e}")
-        return -2
-
-
-def delete_cache(key: str):
-    try:
-        redis_client.delete(key)
-    except Exception as e:
-        logger.warning(f"[缓存删除失败] key={key}, 错误: {e}")
+def get_request_id(request: Request = None) -> str:
+    """
+    获取当前请求唯一追踪ID
+    优先级：请求上下文已存在request_id > 现场生成新短UUID
+    :param request: FastAPI原始请求对象（可选）
+    :return: 格式化后的请求ID字符串，前缀req_ + 12位UUID
+    """
+    # 如果传入request且state中已提前存入request_id，直接复用（中间件提前生成）
+    if request and hasattr(request.state, "request_id"):
+        return request.state.request_id
+    # 无上下文则现场生成短UUID，截取前12位十六进制字符缩短长度
+    return f"req_{uuid4().hex[:12]}"
