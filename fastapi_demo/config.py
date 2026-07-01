@@ -80,6 +80,28 @@ _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ASSET_DOC_DIR = os.path.join(_BASE_DIR, "assets", "energy_storage")
 UPLOAD_DOC_DIR = os.path.join(_BASE_DIR, "uploads")
 
+# Embedding 向量模型配置
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
+_DEFAULT_MODEL_PATH = os.path.join(
+    os.path.expanduser("~/.cache/huggingface/hub"),
+    "sentence-transformers",
+    "all-MiniLM-L6-v2",
+)
+EMBEDDING_MODEL_PATH = os.getenv("EMBEDDING_MODEL_PATH", _DEFAULT_MODEL_PATH)
+EMBED_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "16"))
+MAX_TEXT_TOKEN_LEN = int(os.getenv("MAX_TEXT_TOKEN_LEN", "1024"))
+# 按字符粗估截断（约 4 字符 / token）
+MAX_TEXT_CHAR_LEN = MAX_TEXT_TOKEN_LEN * 4
+
+# 本地向量库存储路径
+VECTOR_DB_PATH = os.path.join(_BASE_DIR, "vector_store", "energy_storage_db")
+COLLECTION_NAME = "energy_storage_kb"
+TOP_N_RETRIEVE = int(os.getenv("TOP_N_RETRIEVE", "3"))
+EMBED_MAX_RETRIES = 2
+# sentence-transformers | tfidf | auto（优先 ST，失败回退 tfidf）
+EMBEDDING_BACKEND = os.getenv("EMBEDDING_BACKEND", "auto")
+EMBEDDING_DIM = int(os.getenv("EMBEDDING_DIM", "384"))
+
 # 单独运行本文件时执行配置打印，用于调试校验配置加载结果
 if __name__ == "__main__":
     config.show_config()
