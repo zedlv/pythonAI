@@ -73,6 +73,13 @@ class AppConfig:
 # 全局单例配置实例，项目全局统一导入使用
 config = AppConfig()
 
+# 项目根目录（fastapi_demo/），用于拼接静态资源路径
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 文档解析路径配置
+ASSET_DOC_DIR = os.path.join(_BASE_DIR, "assets", "energy_storage")
+UPLOAD_DOC_DIR = os.path.join(_BASE_DIR, "uploads")
+
 # 单独运行本文件时执行配置打印，用于调试校验配置加载结果
 if __name__ == "__main__":
     config.show_config()

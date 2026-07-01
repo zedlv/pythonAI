@@ -24,8 +24,8 @@ class PerfTimer:
         finally:
             cost_ms = round((time.time() - start) * 1000, 2)
             key = f"{stage}_ms"
-            if key in self._perf:
-                self._perf[key] += cost_ms
+            self._perf.setdefault(key, 0)
+            self._perf[key] += cost_ms
 
     def mark_cache_hit(self, hit: bool = True):
         """标记缓存是否命中"""

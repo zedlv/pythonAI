@@ -36,3 +36,7 @@ build/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# ====================== 文档上传与临时文件 ======================
+uploads/
+*.tmp
